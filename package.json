@@ -1,0 +1,51 @@
+{
+   "name": "revigred",
+   "version": "0.0.0",
+   "description": "Reusable Visual Graph Editor",
+   "keywords": [
+       "graph",
+       "editor",
+       "html5",
+       "canvas" 
+   ],
+   "maintainers": [
+       {
+           "name": "Eugene Chernyshov",
+           "email": "chernyshov.eugene@gmail.com",
+           "web": "http://ev-genus.org" 
+       } 
+   ],
+   "contributors": [
+   ],
+   "bugs": {
+       "mail": "chernyshov.eugene@gmail.com",
+       "web": "https://github.com/Evgenus/revigred/issues" 
+   },
+   "licenses": [
+       {
+           "type": "LGPLv3",
+           "url": "https://raw.github.com/Evgenus/revigred/master/COPYING.LESSER" 
+       } 
+   ],
+   "repositories": [
+       {
+           "type": "git",
+           "url": "https://github.com/Evgenus/revigred.git" 
+       } 
+   ],
+   "dependencies": {
+   },
+   "implements": [
+   ],
+   "os": ["linux", "macos", "win"],
+   "cpu": [
+   ],
+   "engines": [
+   ],
+   "scripts": {
+   },
+   "directories": {
+       "lib": "lib",
+       "src": "src",
+   } 
+}

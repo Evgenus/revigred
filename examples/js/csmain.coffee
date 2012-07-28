@@ -6,25 +6,28 @@ require.config
         text: "js/require/text"
         order: "js/require/order"
         Stats: 'js/stats'
+        revigred: "../lib/revigred"
     shim:
         'Backbone':
             deps: ['Underscore', 'jQuery']
             exports: 'Backbone'
         'Underscore':
             exports: '_'
-        'jQueryUi':
-            deps: ['Underscore', 'jQuery']
-            exports: 'jQuery'
         'Stats':
             exports: 'Stats'
         'jQuery':
             exports: 'jQuery'
-
+        'jQueryUI':
+            deps: ['Underscore', 'jQuery']
+            exports: 'jQuery'
+        'revigred':
+            deps: ['Backbone', 'jQuery']
 
 define [
     "jQuery",
-    "Stats"
-], ($, Stats) -> 
+    "Stats",
+    "revigred"
+], ($, Stats, revigred) -> 
     stats = new Stats()
     $(stats.domElement)
         .css("position", 'absolute')

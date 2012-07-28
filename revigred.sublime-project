@@ -1,8 +1,17 @@
 {
-	"folders":
-	[
-		{
-			"path": "."
-		}
-	]
+    "folders":
+    [
+        {
+            "path": "."
+        }
+    ],
+    "build_systems":
+    [
+        {
+        "name": "Cake",
+        "cmd": ["cake", "build"],
+        "working_dir": "${project_path}",
+        "shell": true
+        }
+    ]
 }

@@ -1,4 +1,4 @@
-class Vector
+class revigred.Vector
     constructor: (@x, @y) ->
 
     distance: (v) ->
@@ -6,7 +6,7 @@ class Vector
         b = @y - v.y
         return Math.sqrt(a * a + b * b)
 
-class Line
+class revigred.Line
     constructor: (a, b, c) ->
         m = (if c > 0 then -1 else 1) / Math.sqrt(a * a + b * b)
         @A = a * m
@@ -19,7 +19,7 @@ class Line
     distance: (v) ->
         return @A * v.x + @B * v.y + @C
 
-class Segment
+class revigred.Segment
     constructor: (@v1, @v2) ->
         @line = Line.from_vectors(@v1, @v2)
 
