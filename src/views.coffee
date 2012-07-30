@@ -1,155 +1,168 @@
-class root.GraphView extends Backbone.View
-    render: (@callback) ->
-        nodes = new NodesView
-            model: @model.nodes
-            el: @el
-        nodes.render()
-        self = this
-        @$el.mouseup (ev) ->  self.model.drop_start()
-        @canvas = @$("canvas")[0]
-        @context = @canvas.getContext("2d")
-        @draw()
-        $(window).resize(_.bind(@resize, this))
-        @resize()
+define [
+    "Backbone.View"
+],
+-> 
+    views = namespace "revigred.views"
+    math = namespace "revigred.math"
 
-    resize: ->
-        @canvas.width = @$el.innerWidth()
-        @canvas.height = @$el.innerHeight()
+    class views.GraphView extends Backbone.View
+        render: (@callback) ->
+            nodes = new views.NodesView
+                model: @model.nodes
+                el: @el
+            nodes.render()
+            self = this
+            @$el.mouseup (ev) ->  self.model.drop_start()
+            @canvas = @$("canvas")[0]
+            @context = @canvas.getContext("2d")
+            @draw()
+            $(window).resize(_.bind(@resize, this))
+            @resize()
 
-    draw: ->
-        requestAnimationFrame(_.bind(@draw, this))
-        @callback?()
-        @context.clearRect(0, 0, @$el.innerWidth(), @$el.innerHeight())
-        for gizmo in @model.gizmos
-            gizmo.render(@context)
+        resize: ->
+            @canvas.width = @$el.innerWidth()
+            @canvas.height = @$el.innerHeight()
 
-class NodesView extends Backbone.View
-    constructor: (options) ->
-        super(options)
-        @model.on('add', @addOne, this)
-        @model.on('reset', @addAll, this)
+        draw: ->
+            requestAnimationFrame(_.bind(@draw, this))
+            @callback?()
+            @context.clearRect(0, 0, @$el.innerWidth(), @$el.innerHeight())
+            for gizmo in @model.gizmos
+                gizmo.render(@context)
 
-    addAll: () ->
-        @model.forEach(@addOne, this)
+    class views.NodesView extends Backbone.View
+        constructor: (options) ->
+            super(options)
+            @model.on('add', @addOne, this)
+            @model.on('reset', @addAll, this)
 
-    addOne: (connector) ->
-        view = new NodeView
-            model: connector
-        @$el.append(view.render().el)
+        addAll: () ->
+            @model.forEach(@addOne, this)
 
-    render: () ->
-        @addAll()
-        return this
+        addOne: (connector) ->
+            view = new views.NodeView
+                model: connector
+            @$el.append(view.render().el)
 
-class NodeView extends Backbone.View
-    tagName: 'div'
-    className: 'node ui-widget ui-widget-content ui-corner-all'
+        render: () ->
+            @addAll()
+            return this
 
-    constructor: (options) ->
-        super(options)
-        @model.set_bounds(_.bind(@bounds, this))
+    class views.NodeView extends Backbone.View
+        tagName: 'div'
+        className: 'node ui-widget ui-widget-content ui-corner-all'
 
-    render: () ->
-        left = new LeftConnectorsView
-            model: @model.left
-        right = new RightConnectorsView
-            model: @model.right
-        self = this
-        @$el
-            .draggable
-                handle: ".ui-widget-header"
-                scroll: false
-                stack: ".node"
-            .css("left", @model.get("x"))
-            .css("top", @model.get("y"))
-            .css("position", "absolute")
-            .append(@make("div", {class: "ui-widget-header ui-corner-top"}, @model.get("title")))
-            .append(left.render().el)
-            .append(right.render().el)
-        return this
+        constructor: (options) ->
+            super(options)
+            @model.set_bounds(_.bind(@bounds, this))
 
-    bounds: () ->
-        x0 = @el.offsetLeft
-        y0 = @el.offsetTop
-        x1 = x0 + @el.offsetWidth
-        y1 = y0 + @el.offsetHeight
-        return new Segment(new Vector(x0, y0), new Vector(x1, y1))
+        render: () ->
+            left = new views.LeftConnectorsView
+                model: @model.left
+            right = new views.RightConnectorsView
+                model: @model.right
+            self = this
+            @$el
+                .draggable
+                    handle: ".ui-widget-header"
+                    scroll: false
+                    stack: ".node"
+                .css("left", @model.get("x"))
+                .css("top", @model.get("y"))
+                .css("position", "absolute")
+                .append(@make("div", {class: "ui-widget-header ui-corner-top"}, @model.get("title")))
+                .append(left.render().el)
+                .append(right.render().el)
+            return this
 
-class ConnectorsView extends Backbone.View
-    tagName: 'ui'
+        bounds: () ->
+            x0 = @el.offsetLeft
+            y0 = @el.offsetTop
+            x1 = x0 + @el.offsetWidth
+            y1 = y0 + @el.offsetHeight
+            return new math.Segment(
+                new math.Vector(x0, y0), 
+                new math.Vector(x1, y1))
 
-    constructor: (options) ->
-        super(options)
-        @model.on('add', @addOne, this)
-        @model.on('reset', @addAll, this)
+    class views.ConnectorsView extends Backbone.View
+        tagName: 'ui'
 
-    addAll: () ->
-        @model.forEach(@addOne, this)
+        constructor: (options) ->
+            super(options)
+            @model.on('add', @addOne, this)
+            @model.on('reset', @addAll, this)
 
-    render: () ->
-        @addAll()
-        return this
+        addAll: () ->
+            @model.forEach(@addOne, this)
 
-class LeftConnectorsView extends ConnectorsView
-    className: 'left-connectors'
+        render: () ->
+            @addAll()
+            return this
 
-    addOne: (connector) ->
-        view = new LeftConnectorView
-            model: connector
-        @$el.append(view.render().el)
+    class views.LeftConnectorsView extends views.ConnectorsView
+        className: 'left-connectors'
 
-class RightConnectorsView extends ConnectorsView
-    className: 'right-connectors'
-    render: () ->
-        super()
-        @$el.attr("dir", "rtl")
-        return this
+        addOne: (connector) ->
+            view = new views.LeftConnectorView
+                model: connector
+            @$el.append(view.render().el)
 
-    addOne: (connector) ->
-        view = new RightConnectorView
-            model: connector
-        @$el.append(view.render().el)
+    class views.RightConnectorsView extends views.ConnectorsView
+        className: 'right-connectors'
+        render: () ->
+            super()
+            @$el.attr("dir", "rtl")
+            return this
 
-class ConnectorView extends Backbone.View
-    tagName: 'li'
+        addOne: (connector) ->
+            view = new views.RightConnectorView
+                model: connector
+            @$el.append(view.render().el)
 
-    className: 'connector ui-state-default'
+    class views.ConnectorView extends Backbone.View
+        tagName: 'li'
 
-    constructor: (options) ->
-        super(options)
+        className: 'connector ui-state-default'
 
-    render: () ->
-        self = this
-        @$el.text(@model.get("title"))
-            .mousedown (ev) -> 
-                self.model.node.graph?.pick_start(self)
-                ev.stopPropagation()
-                false
-            .mouseup (ev) -> 
-                self.model.node.graph?.pick_end(self)
-                ev.stopPropagation()
-                false
-            .hover () -> $(this).toggleClass("ui-state-highlight")
-        return this
+        constructor: (options) ->
+            super(options)
 
-class LeftConnectorView extends ConnectorView
-    className: 'connector ui-state-default ui-corner-left'
+        render: () ->
+            self = this
+            @$el.text(@model.get("title"))
+                .mousedown (ev) -> 
+                    self.model.node.graph?.pick_start(self)
+                    ev.stopPropagation()
+                    false
+                .mouseup (ev) -> 
+                    self.model.node.graph?.pick_end(self)
+                    ev.stopPropagation()
+                    false
+                .hover () -> $(this).toggleClass("ui-state-highlight")
+            return this
 
-    pos: ->
-        pos = @$el.offset()
-        x0 = pos.left
-        y0 = pos.top + @$el.outerHeight() / 2
-        x1 = x0 - 50
-        y1 = y0
-        return new Segment(new Vector(x0, y0), new Vector(x1, y1))
+    class views.LeftConnectorView extends views.ConnectorView
+        className: 'connector ui-state-default ui-corner-left'
 
-class RightConnectorView extends ConnectorView
-    className: 'connector ui-state-default ui-corner-right'
+        pos: ->
+            pos = @$el.offset()
+            x0 = pos.left
+            y0 = pos.top + @$el.outerHeight() / 2
+            x1 = x0 - 50
+            y1 = y0
+            return new math.Segment(
+                new math.Vector(x0, y0), 
+                new math.Vector(x1, y1))
 
-    pos: ->
-        pos = @$el.offset()
-        x0 = pos.left + @$el.outerWidth()
-        y0 = pos.top + @$el.outerHeight() / 2
-        x1 = x0 + 50
-        y1 = y0
-        return new Segment(new Vector(x0, y0), new Vector(x1, y1))
+    class views.RightConnectorView extends views.ConnectorView
+        className: 'connector ui-state-default ui-corner-right'
+
+        pos: ->
+            pos = @$el.offset()
+            x0 = pos.left + @$el.outerWidth()
+            y0 = pos.top + @$el.outerHeight() / 2
+            x1 = x0 + 50
+            y1 = y0
+            return new math.Segment(
+                new math.Vector(x0, y0), 
+                new math.Vector(x1, y1))
