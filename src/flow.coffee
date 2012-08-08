@@ -25,8 +25,7 @@ define [
                 @add(new models.RightConnectorModel(data))
 
     class flow.SumNode extends flow.FlowNode
-        defaults:
-            title: "Sum"
+        title: "Sum"
 
         inputs:
             a: 

@@ -42,9 +42,18 @@ define [
             height2 = bounds2.v2.y - bounds2.v1.y
             center2 = new math.Vector((bounds2.v1.x + bounds2.v2.x) / 2, (bounds2.v1.y + bounds2.v2.y) / 2)
 
-            #d = Math.sqrt(width1 * width1 + height1 * height1) + Math.sqrt(width2 * width2 + height2 * height2)
-            #c = Math.min(d, center1.distance(center2)) / d
-            c = 1
+            same_node = @connector1.model.node is @connector2.model.node
+            if same_node
+                c = 0.7
+            else
+                d = Math.sqrt(width1 * width1 + height1 * height1) + Math.sqrt(width2 * width2 + height2 * height2)
+                c = Math.min(1+d, edge.length()) / d
+
+            ctx.strokeStyle = "rgb(0,0,0)"
+            ctx.lineWidth = 2
+            ctx.beginPath()
+
+            points = []
 
             v_ur1 = new math.Vector(center1.x + width1 * c, center1.y - height1 * c)
             v_dr1 = new math.Vector(center1.x + width1 * c, center1.y + height1 * c)
@@ -55,21 +64,6 @@ define [
             s_ul1 = new math.Segment(center1, v_ul1)
             s_dl1 = new math.Segment(center1, v_dl1)
 
-            v_ur2 = new math.Vector(center2.x + width2 * c, center2.y - height2 * c)
-            v_dr2 = new math.Vector(center2.x + width2 * c, center2.y + height2 * c)
-            v_ul2 = new math.Vector(center2.x - width2 * c, center2.y - height2 * c)
-            v_dl2 = new math.Vector(center2.x - width2 * c, center2.y + height2 * c)
-            s_ur2 = new math.Segment(center2, v_ur2)
-            s_dr2 = new math.Segment(center2, v_dr2)
-            s_ul2 = new math.Segment(center2, v_ul2)
-            s_dl2 = new math.Segment(center2, v_dl2)
-
-            ctx.strokeStyle = "rgb(0,0,0)"
-            ctx.lineWidth = 2
-            ctx.beginPath()
-
-            points = []
-
             if edge.intersect(s_ur1)
                 points.push(v_ur1) 
             if edge.intersect(s_dr1)
@@ -78,25 +72,40 @@ define [
                 points.push(v_ul1) 
             if edge.intersect(s_dl1)
                 points.push(v_dl1) 
-            if edge.intersect(s_ur2)
-                points.push(v_ur2) 
-            if edge.intersect(s_dr2)
-                points.push(v_dr2) 
-            if edge.intersect(s_ul2)
-                points.push(v_ul2) 
-            if edge.intersect(s_dl2)
-                points.push(v_dl2) 
 
             # s_ur1.draw(ctx)
             # s_dr1.draw(ctx)
             # s_ul1.draw(ctx)
             # s_dl1.draw(ctx)
-            # s_ur2.draw(ctx)
-            # s_dr2.draw(ctx)
-            # s_ul2.draw(ctx)
-            # s_dl2.draw(ctx)
+
+            if not same_node
+                v_ur2 = new math.Vector(center2.x + width2 * c, center2.y - height2 * c)
+                v_dr2 = new math.Vector(center2.x + width2 * c, center2.y + height2 * c)
+                v_ul2 = new math.Vector(center2.x - width2 * c, center2.y - height2 * c)
+                v_dl2 = new math.Vector(center2.x - width2 * c, center2.y + height2 * c)
+                s_ur2 = new math.Segment(center2, v_ur2)
+                s_dr2 = new math.Segment(center2, v_dr2)
+                s_ul2 = new math.Segment(center2, v_ul2)
+                s_dl2 = new math.Segment(center2, v_dl2)
+
+                if edge.intersect(s_ur2)
+                    points.push(v_ur2) 
+                if edge.intersect(s_dr2)
+                    points.push(v_dr2) 
+                if edge.intersect(s_ul2)
+                    points.push(v_ul2) 
+                if edge.intersect(s_dl2)
+                    points.push(v_dl2) 
+
+                # s_ur2.draw(ctx)
+                # s_dr2.draw(ctx)
+                # s_ul2.draw(ctx)
+                # s_dl2.draw(ctx)
 
             points = points.sort((a, b) -> start.distance(a) - start.distance(b))
+
+            if points.length > 2
+                points = [points[0], points[points.length-1]]
 
             points.unshift(start)
             points.push(end)
