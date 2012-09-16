@@ -3,113 +3,28 @@ define [
 ],
 -> 
     views = namespace "revigred.views"
-    math = namespace "revigred.math"
-
-    class RectangularSelector extends Backbone.View
-        setup: (@x, @y) ->
-            @$el.show()
-            @position = @$el.offset()
-            @update(@x, @y)
-
-        render: ->
-            @el = @make("div", class: "selector")
-            @rect = @make("div", class: "rectangle ui-state-highlight")
-            @$rect = $(@rect)
-            @$el = $(@el)
-                .hide()
-                .append(@$rect)
-                .mouseup (event) =>
-                    @$el.hide()
-                    @on_done?()
-                    return false
-                .mousemove (event) =>
-                    @update(event.pageX, event.pageY)
-                    return false
-            return this
-
-        update: (x, y) ->
-            rect = new math.Rect(
-                @x - @position.left, @y - @position.top, 
-                x - @position.left, y - @position.top)
-            @$rect
-                .css("left", rect.min_x)
-                .css("top", rect.min_y)
-                .css("width", rect.width)
-                .css("height", rect.height)
-            @on_changed?(rect)
-
-        changed: (@on_changed) -> this
+    math = namespace "Math"
+    settings = namespace "revigred.settings"
+    Controller = revigred.controller.instance
 
     class views.GraphView extends Backbone.View
-        dragging: false
+        _dragging: false
 
         constructor: (options) ->
             super(options)
-            @selector = new RectangularSelector()
-                .changed(_.bind(@_on_selection_rect_changed, this))
 
-        events:
-            "mouseup"                   : "_on_mouseup"
-            "mousedown"                 : "_on_mousedown"
-            "mousemove"                 : "_on_mousemove"
-            "click"                     : "_on_click"
-
-        _on_selection_rect_changed: (rect) ->
-            selected = @model.nodes.filter (node) -> 
-                rect.intersect(node.bounds())
-            for added in _.difference(selected, @_rect_selected)
-                added.select()
-            for removed in _.difference(@_rect_selected, selected)
-                removed.deselect()
-            @_rect_selected = selected
-
-        _on_mousedown: (event) ->
-            if event.shiftKey
-                @_rect_selected = []
-                @selector.setup(event.pageX, event.pageY)
-            else
-                @dragging = 
-                    x: event.pageX
-                    y: event.pageY
-                @$el.addClass("global-drag")
-            return false            
-
-        _on_mousemove: (event) ->
-            if @dragging
-                new_pos = 
-                    x: event.pageX
-                    y: event.pageY
-                x_offset = new_pos.x - @dragging.x
-                y_offset = new_pos.y - @dragging.y
-                @model.nodes.forEach (node) ->
-                    node.positioner(
-                        node.get("x") + x_offset,
-                        node.get("y") + y_offset)
-                    return false
-                @dragging = new_pos
-
-        _on_mouseup: (event) ->
-            @model.drop_start()
-            @dragging = null
-            @$el.removeClass("global-drag")
-
-        _on_click: (event) ->
-            if not event.ctrlKey
-                for node in @model.get_selected()
-                    node.deselect()
-                return false
+            @nodes = new views.NodesView
+                model: @model.nodes
 
         render: (@callback) ->
+            @$nodes = @nodes.render().$el
             @$el
-                .append(@selector.render().el)
+                # .append(@selector.render().el)
+                .append(@$nodes)
                 .disableSelection()
-            nodes = new views.NodesView
-                model: @model.nodes
-                el: @el
-            nodes.render()
             @$canvas = @$("canvas")
             @canvas = @$canvas[0]
-            @context = @canvas.getContext("2d")
+            @context = @canvas.getContext("experimental-webgl")
             $(window).resize(_.bind(@resize, this))
             @resize()
             @draw()
@@ -121,140 +36,241 @@ define [
         draw: ->
             requestAnimationFrame(_.bind(@draw, this))
             @callback?()
-            @context.clearRect(0, 0, @$el.innerWidth(), @$el.innerHeight())
+            #@context.clearRect(0, 0, @$el.innerWidth(), @$el.innerHeight())
             #for gizmo in @model.gizmos
             #    gizmo.render(@context)
 
     class views.NodesView extends Backbone.View
+        tagName: 'div'
+        className: 'nodes'
+
         constructor: (options) ->
             super(options)
-            @model.on('add', @addOne, this)
-            @model.on('reset', @addAll, this)
+            @selection = new views.SelectionView
+                model: @model.selection
 
-        addAll: () ->
-            @model.forEach(@addOne, this)
+            @model.on('add', @_add, this)
+            @model.on('reset', @_reset, this)
+            @model.on('restore', @_restore, this)
 
-        addOne: (connector) ->
-            view = new views.NodeView
-                model: connector
+        _reset: ->
+            @model.forEach(@_add, this)
+
+        _add: (node) ->
+            view = Controller.get_node_view(node)
             @$el.append(view.render().el)
 
-        render: () ->
-            @addAll()
+        _restore: (node) ->
+            view = Controller.get_node_view(node)
+            @$el.append(view.el)
+
+        _highlight: ->
+            @_diff.unset.forEach (node) -> node.highlight(null)
+            @_diff.remain.forEach (node) -> node.highlight("selected")
+            @_diff.common.forEach (node) -> node.highlight("intersect")
+            @_diff.added.forEach (node) -> node.highlight("added")
+            @_diff.removed.forEach (node) -> node.highlight("removed")
+
+        _cancel_highlight: ->
+            @_diff.result.added.forEach (node) -> node.highlight(null)
+            @_diff.result.unchanged.forEach (node) -> node.highlight("selected")
+            @_diff.result.removed.forEach (node) -> node.highlight("selected")
+
+        render: ->
+            @$el
+                .append(@selection.render().el)
+                .selector
+                    distance: 3
+                    start: (event, widget) =>
+                        new_rule = settings.get_selection_rule(
+                            widget.ctrlKey,
+                            widget.shiftKey, 
+                            widget.altKey)
+                        @_diff = new new_rule(@model.selection.models)
+                        widget.say(@_diff.name)
+                    update: (event, widget) =>
+                        _selected = @model.filter (node) -> 
+                            widget.rect.intersect(node.bounds())
+                        @_diff.update(_selected)
+                        @_highlight()
+                    switch: (event, widget) =>
+                        new_rule = settings.get_selection_rule(
+                            widget.ctrlKey,
+                            widget.shiftKey, 
+                            widget.altKey)
+                        if new_rule?
+                            current = @_diff.current
+                            @_cancel_highlight() 
+                            @_diff = new new_rule(@model.selection.models)
+                            @_diff.update()
+                            @_highlight()
+                            @_diff.update(current)
+                            @_highlight()
+                            widget.say(@_diff.name)
+                    stop: (event, widget) =>
+                        @_diff.result.added.forEach (node) -> node.select()
+                        @_diff.result.unchanged.forEach (node) -> node.highlight("selected")
+                        @_diff.result.removed.forEach (node) -> node.deselect()
+                        delete @_diff
+
+                # .draggable
+                #     scroll: false
+                #     distance: 3
+                #     stop: (event, ui) =>
+                #         @model.drag(@el.offsetLeft, @el.offsetTop)
+                #         @$el.css
+                #             left: 0
+                #             top:  0
+                .css
+                    position: "absolute"
+
+            @_reset()
             return this
+
+    class views.SelectionView extends Backbone.View
+        tagName: 'div'
+        className: 'selection'
+
+        events:
+            "click"                         : "_on_click"
+            "mousedown"                     : "_on_mousedown"
+
+        constructor: (options) ->
+            super(options)
+            @model.on('add', @_add, this)
+            @model.on('remove', @_remove, this)
+            @counter = 0
+            @dragged = false
+
+        _add: (node) ->
+            view = Controller.get_node_view(node)
+            @counter++
+            @$el
+                .show()
+                .append view.$el.css("z-index", @counter)
+
+        _remove: (node) ->
+            @$el.hide() if @model.length == 0                
+
+        render: ->
+            @$el
+                .draggable
+                    handle: ".node"
+                    scroll: false
+                    distance: 3
+                    stop: (event, ui) =>
+                        @dragged = true
+                        @model.drag(@el.offsetLeft, @el.offsetTop)
+                        @$el.css
+                            left: 0
+                            top:  0
+                .css
+                    position: "absolute"
+                .hide()
+            return this
+
+        _on_mousedown: (event) ->
+            @dragged = false
+            return true
+
+        _on_click: (event) ->
+            if @dragged
+                @dragged = false
+                event.stopPropagation()
+            else
+                if settings.is_select(event)
+                    @model.deselect_all()
+            return false
+
 
     class views.NodeView extends Backbone.View
         tagName: 'div'
         className: 'node ui-widget ui-widget-content ui-corner-all'
-
-        old_pos: null
-        dragged: null
+        attributes:
+            tabindex: 1
 
         constructor: (options) ->
             super(options)
-            @model.set_bounds(_.bind(@bounds, this))
-            @model.set_positioner(_.bind(@positioner, this))
-            @model.on('selected', @select, this)
-            @model.on('deselected', @deselect, this)                
+
+            @left = new views.LeftConnectorsView(model: @model.left)
+            @right = new views.RightConnectorsView(model: @model.right)
+
+            @model.set_bounds(_.bind(@bounds, this)) #FIX THAT: Yohoho, shit
+            @model.on('selected', @_on_select, this)
+            @model.on('deselected', @_on_deselect, this)
+            @model.on('destroy', @_on_destroy, this)
+            @model.on('highlight', @_apply_highlight, this)
             @model.on('change:x', @_x_changed, this)
             @model.on('change:y', @_y_changed, this)
+            @dragged = false
 
         events:
             "click"                         : "_on_click"
-            "hover"                         : "_on_hover"
+            #"hover"                         : "_on_hover"
             "mousedown"                     : "_on_mousedown"
-            "click .ui-widget-header"       : "_on_header_click"
+            "keyup"                         : "_on_keyup"
 
         _on_click: (event) ->
-            if event.ctrlKey
-                if @model.get("selected")
-                    @model.deselect()
-                else
-                    @model.select()
-            else
-                for node in @model.graph.get_selected()
-                    node.deselect()
-                @model.select()
-            return false
-
-        # Preventing click just before drag finished
-        _on_header_click: (event) ->
             if @dragged
-                @dragged = null
+                @dragged = false
                 event.stopPropagation()
+            else
+                if settings.is_select(event)
+                    @model.graph.deselect_all()
+                    @model.select()
+                if settings.is_join_select(event)
+                    if @model.get("selected")
+                        @model.deselect()
+                    else
+                        @model.select()
+            return false
 
         _on_hover: (event) ->
             @$el.toggleClass("ui-state-hover")
 
-        # Preventing mousedown to be propagated to nodes holder
+        _on_dragged: ->
+            @dragged = true
+
         _on_mousedown: (event) ->
-            return true if event.shiftKey 
-            event.stopPropagation()
+            @dragged = false
+            @model.graph.nodes.set_dragging_callback(_.bind(@_on_dragged, this))
 
-        positioner: (x, y) ->
-             @$el.css("left", x)
-             @$el.css("top", y)
-             @model.set("x", x, silent: true)
-             @model.set("y", y, silent: true)
+        _on_keyup: (event) ->
+            @model.destroy() if event.which == 46
 
-        _x_changed: (node, value) -> @$el.css("left", value)
-        _y_changed: (node, value) -> @$el.css("top", value)
+        _x_changed: (node, value) -> @$el.css(left: value)
+        _y_changed: (node, value) -> @$el.css(top: value)
 
-        select: () ->
-            @$el.addClass("node-selected")
+        _apply_highlight: (highlight) ->
+            if @highlight != highlight
+                @$el.removeClass("node-highlight-" + @highlight) if @highlight?
+                @highlight = highlight
+                @$el.addClass("node-highlight-" + @highlight) if @highlight?
 
-        deselect: () ->
-            @$el.removeClass("node-selected")
+        _on_select: ->
+            @$el.focus()
+            @_apply_highlight("selected")
 
-        render: () ->
-            left = new views.LeftConnectorsView(model: @model.left)
-            right = new views.RightConnectorsView(model: @model.right)
+        _on_deselect: ->
+            @_apply_highlight(null)
+            @$el.blur()
+
+        _on_destroy: ->
+            @$el.remove()
+
+        render: ->
             @header = @make("div", { class: "ui-widget-header ui-corner-top" }, @model.title)
             @$el
-                .draggable
-                    handle: ".ui-widget-header"
-                    scroll: false
-                    stack: ".node"
-                    start: (event, ui) =>
-                        return false if event.shiftKey 
-                        return false if not @model.get("selected")
-                        $(@header).addClass("ui-state-active")
-                        @old_pos = 
-                            x: @el.offsetLeft
-                            y: @el.offsetTop
-                        @dragged = true
-                    drag: (event, ui) =>
-                        new_pos = 
-                            x: @el.offsetLeft
-                            y: @el.offsetTop
-                        x_offset = new_pos.x - @old_pos.x
-                        y_offset = new_pos.y - @old_pos.y
-                        for node in @model.graph.selection when node isnt @model
-                            node.positioner(
-                                node.get("x") + x_offset,
-                                node.get("y") + y_offset)
-                        @old_pos = new_pos
-                        @model.set("x", @old_pos.x, silent: true)
-                        @model.set("y", @old_pos.y, silent: true)
-                    stop: (event, ui) =>
-                        @old_pos = null
-                        $(@header).removeClass("ui-state-active")
-
-                .css("left", @model.get("x"))
-                .css("top", @model.get("y"))
-                .css("position", "absolute")
+                .css
+                    left: @model.get("x")
+                    top : @model.get("y")
                 .append(@header)
-                .append(left.render().el)
-                .append(right.render().el)
+                .append(@left.render().el)
+                .append(@right.render().el)
                 .disableSelection()
             return this
 
-        create_constrols: () ->
-            container = @make "div", 
-                class: "controls-container"
-            return container
-
-        bounds: () ->
+        bounds: ->
             x0 = @el.offsetLeft
             y0 = @el.offsetTop
             x1 = x0 + @el.offsetWidth
@@ -269,10 +285,10 @@ define [
             @model.on('add', @addOne, this)
             @model.on('reset', @addAll, this)
 
-        addAll: () ->
+        addAll: ->
             @model.forEach(@addOne, this)
 
-        render: () ->
+        render: ->
             @addAll()
             return this
 
@@ -286,7 +302,7 @@ define [
 
     class views.RightConnectorsView extends views.ConnectorsView
         className: 'right-connectors'
-        render: () ->
+        render: ->
             super()
             @$el.attr("dir", "rtl")
             return this
@@ -304,26 +320,25 @@ define [
             super(options)
             @model.set_position(_.bind(@pos, this))
 
-        events:
-            "mousedown"         : "_on_mousedown"
-            "mouseup"           : "_on_mouseup"
-            "hover"             : "_on_hover"
+        # events:
+        #     "mousedown"         : "_on_mousedown"
+        #     "mouseup"           : "_on_mouseup"
+        #     #"hover"             : "_on_hover"
 
-        _on_mousedown: (event) ->
-            return true if event.shiftKey 
-            @model.node.graph?.pick_start(@model)
-            return false
+        # _on_mousedown: (event) ->
+        #     @model.node.graph?.pick_start(@model)
+        #     return false
 
-        _on_mouseup: (event) ->
-            @model.node.graph?.pick_end(@model)
-            return false
+        # _on_mouseup: (event) ->
+        #     @model.node.graph?.pick_end(@model)
+        #     return false
 
-        _on_hover: (event) ->
-            @$el
-                .toggleClass("ui-state-highlight")
-                .toggleClass("ui-state-default")
+        # _on_hover: (event) ->
+        #     @$el
+        #         .toggleClass("ui-state-highlight")
+        #         .toggleClass("ui-state-default")
 
-        render: () ->
+        render: ->
             @$el.text(@model.get("title"))
             return this
 

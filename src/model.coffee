@@ -1,19 +1,16 @@
 define [
     'Backbone.Model'
-,   'Backbone.Collection'
+,   "revigred.controller"
 ], -> 
     models = namespace "revigred.models"
     collections = namespace "revigred.collections"
     gizmos = namespace "revigred.gizmos"
-    views = namespace "revigred.views"
 
     class models.GraphModel extends Backbone.Model
         constructor: (options) ->
             super(options)
             @nodes = new collections.NodesList()
-            @edges = []
-            @cursor_object = null
-            @selection = []
+            @connections = new collections.ConnectionsList()
 
         add: (nodes...) ->
             for node in nodes
@@ -27,33 +24,36 @@ define [
                     @gizmos.push(node)
             return this
 
-        pick_start: (view) ->
-            @cursor_object = view
+        pick_start: (@start_connector) ->
 
-        pick_end: (view) ->
-            if @cursor_object?
-                if isinstance(@cursor_object, models.ConnectorModel)
-                    if @cursor_object is view
-                        @drop_start(view)
-                    else
-                        gizmo = new gizmos.EdgeGizmo(view, @cursor_object)
-                        @edges.push()
-                        @cursor_object = null
+        pick_end: (end_connector) ->
+            if @start_connector?
+                if @start_connector isnt end_connector
+                    connection = @make_connection(@start_connector, end_connector)
+                    @connections.push(connection)
+                @drop_start()
 
-        drop_start: (view) ->
-            @cursor_object = null
+        drop_start: () ->
+            @start_connector = null
 
-        get_selected: () -> _.clone(@selection)
+        make_connection: (connector1, connector2) ->
+            new models.ConnectionModel
+                start: connector1
+                end: connector2
 
-        _add_selected: (node) ->
-            index = @selection.indexOf(node)
-            @selection.push(node) if index < 0
+        select: (node) -> node.set("selected", true)
+        deselect: (node) -> node.set("selected", false)
+        deselect_all: () -> @nodes?.selection?.deselect_all()
 
-        _remove_selected: (node) ->
-            index = @selection.indexOf(node)
-            @selection.splice(index, 1) if index >= 0
+        _on_select_node: (node) ->
+            @nodes?.selection?.add(node)
+
+        _on_deselect_node: (node) ->
+            @nodes?.selection?.remove(node)
 
     class models.NodeModel extends Backbone.Model
+        title: ""
+
         defaults:
             id: null
             x: 0
@@ -64,20 +64,15 @@ define [
             id: (value, attr, computedState) ->
                 return 'Name is invalid' if not value?
 
-        title: ""
-
         constructor: (options) ->
             super(options)
             @set("id", uuid.v4()) if not options.id?
             @left = new collections.LeftConnectorsList()
             @right = new collections.RightConnectorsList()
-            @on "change:selected", @_apply_selection
+            @on("change:selected", @_on_selection, this)
 
         set_graph: (@graph) ->
-
         set_bounds: (@bounds) ->
-
-        set_positioner: (@positioner) ->
 
         add: (connectors...) ->
             for connector in connectors
@@ -91,22 +86,27 @@ define [
                 connector.set_node(this)
             return this
 
-        # Selection dispatcher. Don't use iе directly
-        _apply_selection: (obj, value, changes) ->
+        highlight: (type) -> @trigger("highlight", type)
+        select: -> @set("selected", true)
+        deselect: -> @set("selected", false)
+
+        moveBy: (dx, dy) ->
+            @set("x", @attributes.x + dx)
+            @set("y", @attributes.y + dy)
+
+        _on_selection: (model, value, options) ->
             if value
-                obj.graph._add_selected(obj)
-                obj.trigger("selected")
+                @trigger("selected")
+                @graph._on_select_node(this)
             else
-                obj.graph._remove_selected(obj)
-                obj.trigger("deselected")
+                @trigger("deselected")
+                @graph._on_deselect_node(this)
 
-        # Invoke that to make node selected
-        select: () ->
-            @set("selected", true)
+        destroy: ->
+            delete @graph
+            delete @bounds
+            @trigger('destroy', this, @collection)
 
-        # Invoke that to make node not selected
-        deselect: () ->
-            @set("selected", false)
 
     class models.ConnectorModel extends Backbone.Model
         defaults:
@@ -114,7 +114,6 @@ define [
             title: ""
 
         set_node: (@node)->
-
         set_position: (@position) ->
 
     class models.LeftConnectorModel extends models.ConnectorModel
@@ -125,18 +124,66 @@ define [
             start: null
             end: null
 
-define [
-    'revigred.models.NodeModel'
+define "revigred.collections", [
+    'Backbone.Collection'
+,   'revigred.models.NodeModel'
 ,   'revigred.models.LeftConnectorModel'
 ,   'revigred.models.RightConnectorModel'
 ], -> 
-    coll = namespace "revigred.collections"
     models = namespace "revigred.models"
+    collections = namespace "revigred.collections"
 
-    class coll.NodesList extends Backbone.Collection
+    class @NodesList extends Backbone.Collection
         model: models.NodeModel
-    class coll.ConnectorsList extends Backbone.Collection
-    class coll.LeftConnectorsList extends coll.ConnectorsList
+
+        constructor: (options) ->
+            super(options)
+            @selection = new collections.Selection()
+            @selection.on("remove", @_on_restore, this)
+
+        _on_restore: (node, collection) -> @trigger("restore", node)
+
+        set_dragging_callback: (callback) ->
+            @selection.set_dragging_callback(callback)
+
+        drag: (dx, dy) ->
+            @forEach (node) -> 
+                node.moveBy(dx, dy)
+                false
+            @selection.notify_dragging()
+
+    class @ConnectorsList extends Backbone.Collection
+    class @LeftConnectorsList extends @ConnectorsList
         model: models.LeftConnectorModel
-    class coll.RightConnectorsList extends coll.ConnectorsList
+    class @RightConnectorsList extends @ConnectorsList
         model: models.RightConnectorModel
+
+    class @Selection extends Backbone.Collection
+        model: models.NodeModel
+        
+        constructor: () ->
+            super()
+
+        deselect_all: -> 
+            _.forEach(@toArray(), (node) -> node.deselect())
+
+        set_dragging_callback: (callback) ->
+            @dragging_callback = callback
+
+        notify_dragging: ->
+            if @dragging_callback?
+                @dragging_callback()
+                delete @dragging_callback
+
+        drag: (dx, dy) ->
+            @forEach (node) -> 
+                node.moveBy(dx, dy)
+                false
+            @notify_dragging()
+
+define "revigred.collections", [
+    'revigred.models.ConnectionModel'
+], -> 
+    models = namespace "revigred.models"
+    class @ConnectionsList extends Backbone.Collection
+        models.ConnectionModel

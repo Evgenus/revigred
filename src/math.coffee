@@ -1,7 +1,7 @@
 define [
 ],
 -> 
-    math = namespace 'revigred.math'
+    math = namespace 'Math'
 
 
     class math.Vector
