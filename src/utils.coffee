@@ -3,6 +3,9 @@ define [
 -> 
     root = this
 
+    Function::property ?= (prop, desc) ->
+        Object.defineProperty @prototype, prop, desc
+
     _isinstance = (t, types...) ->
         for type in types
             if type is t
@@ -22,8 +25,6 @@ define [
         window.msRequestAnimationFrame     ||
         (callback) -> window.setTimeout(callback, 20)
 
-    Function::property = (prop, desc) ->
-        Object.defineProperty @prototype, prop, desc
 
 # ____________________________________________________________________________ #
 
@@ -35,7 +36,7 @@ define [
             get: -> @_removed ?= _.difference(@old, @new)
 
         @property 'unchanged',
-            get: -> @_unchanged ?= _.intersect(@old, @new)
+            get: -> @_unchanged ?= _.intersection(@old, @new)
 
         @property 'added',
             get: -> @_added ?= _.difference(@new, @old)
@@ -73,14 +74,14 @@ define [
         constructor: (@base) ->
             @diff = new root.Diff()
 
-        @property 'remain', # grey
-            get: -> @_remain ?= _.intersect(@diff.removed, @base)
+        @property 'remain', # gray
+            get: -> @_remain ?= _.intersection(@diff.removed, @base)
 
         @property 'unset', # clear
             get: -> @_unset ?= _.difference(@diff.removed, @base)
 
         @property 'common', # yellow
-            get: -> @_common ?= _.intersect(@diff.added, @base)
+            get: -> @_common ?= _.intersection(@diff.added, @base)
 
         @property 'added', # green
             get: -> @_added ?= _.difference(@diff.added, @base)
@@ -99,20 +100,20 @@ define [
         constructor: (@base) ->
             @diff = new root.Diff(@base)
 
-        @property 'remain', # grey
+        @property 'remain', # gray
             get: -> @_remain ?= [] 
 
         @property 'unset', # clear
             get: -> @_unset ?= _.difference(@diff.removed, @base)
 
         @property 'common', # yellow
-            get: -> @_common ?= _.intersect(@diff.added, @base)
+            get: -> @_common ?= _.intersection(@diff.added, @base)
 
         @property 'added', # green
             get: -> @_added ?= _.difference(@diff.added, @base)
 
         @property 'removed', # red
-            get: -> @_removed ?= _.intersect(@base, @diff.removed)
+            get: -> @_removed ?= _.intersection(@base, @diff.removed)
 
         @property 'result',
             get: -> @_result ?= new root.Diff(@base, @current)
@@ -125,23 +126,23 @@ define [
         constructor: (@base) ->
             @diff = new root.Diff(@base)
 
-        @property 'remain', # grey
+        @property 'remain', # gray
             get: -> @_remain ?= [] 
 
         @property 'unset', # clear
             get: -> @_unset ?= _.difference(@diff.removed, @base)
 
         @property 'common', # yellow
-            get: -> @_common ?= _.intersect(@diff.added, @base)
+            get: -> @_common ?= _.intersection(@diff.added, @base)
 
         @property 'added', # green
             get: -> @_added ?= []
 
         @property 'removed', # red
-            get: -> @_removed ?= _.intersect(@base, @diff.removed)
+            get: -> @_removed ?= _.intersection(@base, @diff.removed)
 
         @property 'result',
-            get: -> @_result ?= new root.Diff(@base, _.intersect(@base, @current))
+            get: -> @_result ?= new root.Diff(@base, _.intersection(@base, @current))
 
 # ____________________________________________________________________________ #
 
@@ -151,8 +152,8 @@ define [
         constructor: (@base) ->
             @diff = new root.Diff()
 
-        @property 'remain', # grey
-            get: -> @_remain ?= _.intersect(@base, @diff.removed)
+        @property 'remain', # gray
+            get: -> @_remain ?= _.intersection(@base, @diff.removed)
 
         @property 'unset', # clear
             get: -> @_unset ?= []
@@ -164,7 +165,7 @@ define [
             get: -> @_added ?= []
 
         @property 'removed', # red
-            get: -> @_removed ?= _.intersect(@base, @diff.added)
+            get: -> @_removed ?= _.intersection(@base, @diff.added)
 
         @property 'result',
             get: -> @_result ?= new root.Diff(@base, _.difference(@base, @current))

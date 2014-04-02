@@ -125,3 +125,5 @@ $.widget "ui.selector", $.ui.mouse,
         @_trigger "stop", event, this
         @helper.remove()
         return false
+
+    _mouseCapture: (event) -> true

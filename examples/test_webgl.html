@@ -1,0 +1,318 @@
+<!doctype html>
+<html>
+
+<head>
+    <style>
+        body {
+            background: #FFFFA0;
+        }
+        * {
+            padding: 0px;
+            margin: 0px;
+        }
+    </style>
+
+    <script src="http://code.jquery.com/jquery.min.js" type="text/javascript"></script>
+    <script src="https://raw.github.com/mrdoob/stats.js/master/build/stats.min.js" type="text/javascript"></script>
+    
+    <script id="vertexShader" type="x-shader/x-vertex">
+        vec2 evaluateBezierPosition(vec2 a, vec2 b, vec2 c, vec2 d, float t)
+        {
+            vec2 p = mix(a, b, t);
+            vec2 q = mix(b, c, t);
+            vec2 r = mix(c, d, t);
+
+            vec2 s = mix(p, q, t);
+            vec2 u = mix(q, r, t);
+
+            return mix(s, u, t);
+        }
+
+        float decodeFloat(vec2 c) {
+            return dot(c, vec2(255.0, 65025.0)) - 32385.0;
+        }
+
+        vec2 decodePos(vec4 c) {
+            return vec2(decodeFloat(c.xy), decodeFloat(c.zw));
+        }
+
+        uniform vec2 resolution;
+        uniform float textureSize;
+        uniform sampler2D bezierData;
+
+        vec2 texelPos(float offset) {
+            float p = floor(offset / textureSize);
+            float x = offset - p * textureSize + 0.5;
+            float y = p + 0.5;
+            return vec2(x, y) / textureSize;
+        }
+
+        vec2 getPoint(float offset) {
+            return decodePos(texture2D(bezierData, texelPos(offset)));
+        }
+
+        vec2 screenCoords(vec2 pos) {
+            vec2 clipSpace = 2.0 * pos / resolution - 1.0;
+            return vec2(clipSpace.x, -clipSpace.y);
+        }
+
+        attribute vec2 curve;
+        varying float frag_t;
+
+        void main() {
+            frag_t = curve.y;
+            float texelOffset = curve.x * 4.0;
+
+            vec2 p1  = getPoint(texelOffset);
+            vec2 cp1 = getPoint(texelOffset + 1.0);
+            vec2 cp2 = getPoint(texelOffset + 2.0);
+            vec2 p2 =  getPoint(texelOffset + 3.0);
+
+            vec2 pos = evaluateBezierPosition(p1, cp1, cp2, p2, frag_t);
+            gl_Position = vec4(screenCoords(pos), 0, 1);
+        }
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        precision mediump float;
+        uniform float Time;
+        varying float frag_t;
+        
+        void main() {
+            float wave = sin(frag_t * 200.0 + Time * 10.0);
+            if (wave < 0.0) discard;
+            gl_FragColor = vec4(.3, .3, .3, 1);
+        }
+    </script>
+
+    <script>
+
+        var requestAnimationFrame = 
+            window.requestAnimationFrame       ||
+            window.webkitRequestAnimationFrame ||
+            window.mozRequestAnimationFrame    ||
+            window.oRequestAnimationFrame      ||
+            window.msRequestAnimationFrame     ||
+            function(callback) { window.setTimeout(callback, 20); }
+
+        function randRange(a, b) {
+            return Math.random() * (b - a) + a;
+        }
+
+        function createShader(str, type) {
+            var shader = gl.createShader(type);
+            gl.shaderSource(shader, str);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        function createProgram(vstr, fstr) {
+            var program = gl.createProgram();
+            var vshader = createShader(vstr, gl.VERTEX_SHADER);
+            var fshader = createShader(fstr, gl.FRAGMENT_SHADER);
+            gl.attachShader(program, vshader);
+            gl.attachShader(program, fshader);
+            gl.linkProgram(program);
+            return program;
+        }
+
+        function packFloat(array, offset, f) {
+            var norm = f + 32385.0
+            var y = Math.floor(norm / 255);
+            array[offset] = norm - y * 255;
+            array[offset + 1] = y;
+        }
+
+        function packCoords(array, offset, x, y) {
+            packFloat(array, offset, x);
+            packFloat(array, offset + 2, y);
+        }
+
+        $(function() {
+            var SEGMENTS = 20;
+            var CURVES = 1;
+            var TEXTURE_SIZE = 512;
+
+            function initPoints() {
+                var pointsBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, pointsBuffer);
+
+                var pointsData = [];
+                for(var k = 0; k < CURVES * 4; k++) {
+                    for(var t = 0; t < SEGMENTS; t++) 
+                    {
+                        pointsData.push(k);
+                        pointsData.push(t / SEGMENTS);
+                        pointsData.push(k);
+                        pointsData.push((t + 1) / SEGMENTS);
+                    }                
+                }
+
+                var pointsArray = new Float32Array(pointsData);
+                gl.bufferData(gl.ARRAY_BUFFER, pointsArray, gl.STATIC_DRAW);
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+                return pointsBuffer;
+            }
+
+            function initShader() {
+                var vs = $(vertexShader).text();
+                var fs = $(fragmentShader).text();
+                var program = createProgram(vs, fs);
+
+                program.attr_curve = gl.getAttribLocation(
+                    program, 'curve');
+
+                program.s_bezierData = gl.getUniformLocation(
+                    program, "bezierData");
+
+                program.attr_Time = gl.getUniformLocation(
+                    program, 'Time');
+                
+                program.u_resolution = gl.getUniformLocation(
+                    program, 'resolution');
+
+                program.u_textureSize = gl.getUniformLocation(
+                    program, 'textureSize');
+
+                return program;
+            }
+
+            function initBezierData() {
+                var texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+                gl.bindTexture(gl.TEXTURE_2D, null);
+                return texture;
+            }
+
+            function fillBezierData(texture) {
+                var array = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
+
+                var c = 0;
+
+                for(var k = 0; k < CURVES; k++) {
+                    var y = gl.drawingBufferHeight * k / CURVES;
+                    var x = 0;
+                    packCoords(array, c, x, y);
+                    packCoords(array, c + 4, x + 200, y);
+                    packCoords(array, c + 8, 
+                        gl.mouseX + (x - gl.mouseX) / 5, 
+                        gl.mouseY);
+                    packCoords(array, c + 12, gl.mouseX, gl.mouseY);
+                    c += 16;
+                }
+
+                for(var k = 0; k < CURVES; k++) {
+                    var y = gl.drawingBufferHeight * k / CURVES;
+                    var x = gl.drawingBufferWidth;
+                    packCoords(array, c, x, y);
+                    packCoords(array, c + 4, x - 200, y);
+                    packCoords(array, c + 8, 
+                        gl.mouseX + (x - gl.mouseX) / 5, 
+                        gl.mouseY);
+                    packCoords(array, c + 12, gl.mouseX, gl.mouseY);
+                    c += 16;
+                }
+
+                for(var k = 0; k < CURVES; k++) {
+                    var y = 0;
+                    var x = gl.drawingBufferWidth * k / CURVES;
+                    packCoords(array, c, x, y);
+                    packCoords(array, c + 4, x, y + 200);
+                    packCoords(array, c + 8, 
+                        gl.mouseX, 
+                        gl.mouseY + (y - gl.mouseY) / 5);
+                    packCoords(array, c + 12, gl.mouseX, gl.mouseY);
+                    c += 16;
+                }
+
+                for(var k = 0; k < CURVES; k++) {
+                    var y = gl.drawingBufferHeight;
+                    var x = gl.drawingBufferWidth * k / CURVES;
+                    packCoords(array, c, x, y);
+                    packCoords(array, c + 4, x, y - 200);
+                    packCoords(array, c + 8, 
+                        gl.mouseX, 
+                        gl.mouseY + (y - gl.mouseY) / 5);
+                    packCoords(array, c + 12, gl.mouseX, gl.mouseY);
+                    c += 16;
+                }
+
+
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, TEXTURE_SIZE, TEXTURE_SIZE, 0, gl.RGBA, gl.UNSIGNED_BYTE, array);
+                gl.bindTexture(gl.TEXTURE_2D, null);
+            }
+
+
+            if (typeof Stats !== "undefined") 
+            {
+                var stats = new Stats()
+                $(stats.domElement)
+                    .css("position", 'absolute')
+                    .css("right", '0px')
+                    .css("top", '0px')
+                    .appendTo("body");
+            }
+
+            var canvas = $("#canvas");
+            gl = canvas[0].getContext('experimental-webgl');
+
+            gl.mouseX = gl.drawingBufferWidth / 2;
+            gl.mouseY = gl.drawingBufferHeight / 2;
+
+            canvas.mousemove(function(event) {
+                gl.mouseX = event.pageX;
+                gl.mouseY = event.pageY;
+            });
+
+            gl.clearColor(0, 0, 0, 0);
+            gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+
+            var pointsBuffer = initPoints();
+
+            var bezierDataTexture = initBezierData();
+            var shader = initShader();
+
+            gl.useProgram(shader);
+            
+            gl.uniform2f(shader.u_resolution, gl.drawingBufferWidth, gl.drawingBufferHeight);
+            gl.uniform1f(shader.u_textureSize, TEXTURE_SIZE);
+
+            gl.uniform1i(shader.s_bezierData, 0);
+
+            var startTime = Date.now();
+
+            function draw() {
+
+                fillBezierData(bezierDataTexture);
+
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, bezierDataTexture);   
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, pointsBuffer);
+                gl.enableVertexAttribArray(shader.attr_curve);
+                gl.vertexAttribPointer(shader.attr_curve, 2, gl.FLOAT, false, 0, 0);
+
+                var time = (Date.now() - startTime) / 1000.0;
+                gl.lineWidth(2.0);
+                gl.uniform1f(shader.attr_Time, time);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                gl.drawArrays(gl.LINES, 0, SEGMENTS * CURVES * 4 * 2);
+                requestAnimationFrame(draw);
+                stats.update();
+                gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            }
+
+            draw();
+        });
+    </script>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="800"></canvas>
+</body>
+
+</html>

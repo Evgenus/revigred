@@ -4,7 +4,7 @@ fs = require "fs"
 
 source_dir = "./src"
 output_dir = "lib"
-project_name = "revigred"
+project_name = "revigred.js"
 
 task "build", "compile all coffeescript files to javascript", ->
   cmd = ["coffee", "--join", project_name, "--compile", "--output", output_dir, source_dir].join(" ")
