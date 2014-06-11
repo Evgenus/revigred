@@ -139,10 +139,10 @@ define [
             @start_connector = null
 
         connect: (connector1, connector2) ->
-            connector = @connections.findWhere
-                start: connector1
-                end: connector2
-            return if connector?
+            # connector = @connections.findWhere
+            #     start: connector1
+            #     end: connector2
+            # return if connector?
             connection = new models.ConnectionModel
                 start: connector1
                 end: connector2
