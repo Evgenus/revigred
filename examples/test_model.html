@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>ReViGrEd Example</title>
+        <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+        
+        <!--link rel="stylesheet/less" type="text/css" href="../css/ui-lightness.less" /-->
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/less.js/1.7.0/less.js" type="text/javascript"></script>
+
+        <!-- Dependencies -->
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1-beta1/jquery.js" type="text/javascript"></script>
+        <!--script src="http://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.10.4/jquery-ui.js" type="text/javascript"></script-->
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/lodash.js/2.4.1/lodash.compat.js" type="text/javascript"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/backbone.js/1.1.2/backbone.js" type="text/javascript"></script>
+        <script src="http://rawgithub.com/thedersen/backbone.validation/master/dist/backbone-validation-min.js" type="text/javascript"></script>
+        <script src="http://rawgithub.com/mrdoob/stats.js/master/build/stats.min.js" type="text/javascript"></script>
+        <script src="https://rawgithub.com/Evgenus/depender.js/master/lib/depender.js" type="text/javascript"></script>
+        <script src="http://rawgithub.com/broofa/node-uuid/master/uuid.js" type="text/javascript"></script>
+        <script src="../lib/jquery-ui.js" type="text/javascript"></script>
+        <!-- Distribution package -->
+        <script src="../lib/revigred.js" type="text/javascript"></script>
+        
+        <link rel="stylesheet" type="text/css" media="screen" href="http://code.jquery.com/ui/jquery-ui-git.css">
+        <style>
+            .graph {
+                font-family: Monospace;
+                overflow: hidden;
+                font-size: 12px;
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                bottom: 10px;
+                right: 10px;
+                outline: none;
+                background-color: #FFFFAA;
+            }
+
+            .graph .nodes {
+                position: absolute;
+                top: 0px;
+                left: 0px;
+                width: 100%;
+                height: 100%;
+            }
+
+            .graph .nodes .selection {
+                position: absolute;
+                top: 0px;
+                left: 0px;
+                width: 100%;
+                height: 100%;
+            }
+
+            .graph canvas {
+                width: 100%;
+                height: 100%;
+            }
+
+            .graph .selector {
+                position: absolute;
+                z-index: 100000;
+                left: 0px;
+                top: 0px;
+                right: 0px;
+                bottom: 0px;
+                opacity: 0.2;
+                cursor: crosshair;
+            }
+
+            .graph .selector .rectangle {
+                position: absolute;
+            }
+
+            .local-node {
+                opacity: 0.3
+            }
+
+            .node {
+                white-space: nowrap;
+                display: inline-block;
+                position: absolute;
+            }
+
+            .node-highlight-selected {
+                box-shadow: 0 0 10px black
+            }
+
+            .node-highlight-intersect {
+                box-shadow: 0 0 10px yellow
+            }
+
+            .node-highlight-added {
+                box-shadow: 0 0 10px green
+            }
+
+            .node-highlight-removed {
+                box-shadow: 0 0 10px red
+            }
+
+            .node .ui-widget-header {
+                text-align: center;
+                cursor: default;
+                margin: -1px;
+            }
+
+            .node-highlight-selected,
+            .node-highlight-selected .ui-widget-header {
+                cursor: move;
+            }
+
+            .node .left-connectors,
+            .node .right-connectors {
+                list-style: none;
+                vertical-align: top;
+                min-height: 28px;
+            }
+
+            .node .left-connectors {
+                margin: 0px 5px 0px -20px;
+                float: left;
+            }
+
+            .node .right-connectors {
+                margin: 0px -20px 0px 5px;
+                float: right;
+            }
+
+            .node .left-connectors .connector, 
+            .node .right-connectors .connector {
+                margin: 5px 0;
+                cursor: default;
+                padding: 0 15px;
+                min-height: 16px;
+            }
+
+            #controls {
+                position: absolute;
+                z-index: 100;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="controls">
+            <button id="btn_add_node_external">Add External</button>
+            <button id="btn_add_node_internal">Add Internal</button>
+        </div>
+        <div id="holder" class="graph" tabindex="0"></div>
+
+    	<script>
+    	$(function() {
+		    var stats = new Stats()
+		    $(stats.domElement)
+		        .css("position", 'absolute')
+		        .css("right", '0px')
+		        .css("top", '0px')
+		        .appendTo("body");
+
+            var models = namespace("revigred.models");
+            var views = namespace("revigred.views");
+
+            graph = new models.GraphModel();
+            channel = new models.EchoChannel(graph);
+
+            view = new views.GraphCanvasView({
+                model: graph,
+                el: "#holder",
+                dragging_button: 2
+            });
+            view.render(_.bind(stats.update, stats));
+
+            var n = 1;
+            $("#btn_add_node_external").click(function() {
+                var id = uuid.v4();
+                channel.onNodeCreated(null, id, "external" + n);
+                setTimeout(function() {
+                    channel.onNodeStateChanged(null, id, 
+                        {"title": "externalState" + n});
+                }, 1000);
+                setTimeout(function() {
+                    channel.onPortsChanged(null, id, [
+                            {name: "in"}
+                        ], [
+                            {name: "out1", title: "1"}
+                        ]);
+                }, 1500);
+                n++;
+            });
+
+            $("#btn_add_node_internal").click(function() {
+                var node = graph.create_node();
+                node.set("title", "internal" + n)
+                n++;
+            });
+    	});
+    	</script>
+    </body>
+</html> 
